@@ -1,0 +1,528 @@
+---
+title: "R_Project_Combining"
+output: html_document
+date: "2023-12-12"
+---
+# Data Filtering
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(tidyverse)
+library(scatterplot3d)
+library(GGally)
+library(hrbrthemes)
+library(viridisLite)
+library(viridis)
+
+M <- read.csv("dublin2022marathon.csv")
+
+#Deleting 3 features namely Photo, Youtube and Share as they are all null and have no influence on the race outcomes
+M <- M[,!(names(M) %in% c("Photo", "YouTube", "Share"))]
+
+#Replacing Missing Club values as No clubs
+M <- M|> mutate(Club = coalesce(na_if(Club, ""), "No club"))
+
+#Separating the ones who finished the race from those who did not finish
+MF <- M[!(M$Stage.Position == '0'| M$Stage.Position == 'DNF' | M$Chip.Time ==''| M$Gun.Time ==''| M$Category ==''|M$Overall.Position =='DNF'| M$Stage.Position.1=='0'|M$Stage.Position.1=='DNF'|M$Stage.Position.2 == '0'| M$Stage.Position.2 == 'DNF' |M$Stage.Position.3 == '0'| M$Stage.Position.3 == 'DNF'| M$Stage.Position.4 == '0'| M$Stage.Position.4 == 'DNF'),]
+
+
+#Function to convert the timestamps into seconds
+convert_time <- function(t) {
+  tp <- as.numeric(strsplit(t, ":")[[1]])
+  return(tp[1] * 3600 + tp[2] * 60 + tp[3])
+}
+
+#Converting Timestamps to seconds
+MF <- MF|> mutate(X10K= sapply(X10K,convert_time))
+MF <- MF|> mutate(Gun.Time= sapply(Gun.Time,convert_time))
+MF <- MF|> mutate(Chip.Time=sapply(Chip.Time,convert_time))
+
+MF <- MF|> mutate(X20K= sapply(X20K,convert_time))
+MF <- MF|> mutate(HALFWAY= sapply(HALFWAY,convert_time))
+MF <- MF|> mutate(X30K= sapply(X30K,convert_time))
+MF <- MF|> mutate(X40K= sapply(X40K,convert_time))
+
+
+#converting the position data into numeric
+MF$Category.Position <-as.numeric(MF$Category.Position)
+MF$Gender.Position <-as.numeric(MF$Gender.Position)
+MF$Stage.Position <-as.numeric(MF$Stage.Position)
+MF$Overall.Position <- as.numeric(MF$Overall.Position)
+MF$Chip.Position <- as.numeric(MF$Chip.Position)
+
+MF$Stage.Position.1 <-as.numeric(MF$Stage.Position.1)
+MF$Stage.Position.2 <-as.numeric(MF$Stage.Position.2)
+MF$Stage.Position.3 <-as.numeric(MF$Stage.Position.3)
+MF$Stage.Position.4 <-as.numeric(MF$Stage.Position.4)
+
+
+
+#Renaming the column names
+colnames(MF)[colnames(MF)=="X10K"]<- "Time_10Km"
+colnames(MF)[colnames(MF)=="X20K"]<- "Time_20Km"
+colnames(MF)[colnames(MF)=="HALFWAY"]<- "Time_25Km"
+colnames(MF)[colnames(MF)=="X30K"]<- "Time_30Km"
+colnames(MF)[colnames(MF)=="X40K"]<- "Time_40Km"
+
+colnames(MF)[colnames(MF)=="Stage.Position"]<- "Position_10Km"
+colnames(MF)[colnames(MF)=="Stage.Position.1"]<- "Position_20Km"
+colnames(MF)[colnames(MF)=="Stage.Position.2"]<- "Position_25Km"
+colnames(MF)[colnames(MF)=="Stage.Position.3"]<- "Position_30Km"
+colnames(MF)[colnames(MF)=="Stage.Position.4"]<- "Position_40Km"
+
+```
+
+#Arun Creating Variables
+```{r}
+#Creating a new column for analyzing if the person improved their position from the first 10 Km
+MF <- MF |> mutate(Improvement = if_else(Position_10Km>Overall.Position,"Yes","No"))
+
+#Creating a new column to determining the average speed of a person(The race was 42.2Km long)
+MF <- MF |> mutate(Speed_10 = 10000/Time_10Km)
+MF <- MF |> mutate(Speed_20 = 10000/(Time_20Km-Time_10Km))
+MF <- MF |> mutate(Speed_25 = 5000/(Time_25Km-Time_20Km))
+MF <- MF |> mutate(Speed_30 = 5000/(Time_30Km-Time_25Km))
+MF <- MF |> mutate(Speed_40 = 10000/(Time_40Km-Time_30Km))
+MF <- MF |> mutate(Avg_speed = 42200/Gun.Time)
+
+
+#Analyze the different mean speed of each categories at each intervals
+mean_spd_10<- MF |> group_by(Category) |> summarize(Meanspd=mean(Speed_10))
+mean_spd_20<- MF |> group_by(Category) |> summarize(Meanspd=mean(Speed_20))
+mean_spd_25<- MF |> group_by(Category) |> summarize(Meanspd=mean(Speed_25))
+mean_spd_30<- MF |> group_by(Category) |> summarize(Meanspd=mean(Speed_30))
+mean_spd_40<- MF |> group_by(Category) |> summarize(Meanspd=mean(Speed_40))
+SPEED<- MF |> group_by(Category) |> summarize(Meanspd=mean(Avg_speed))
+
+
+MS<- MF[(MF$Category=='MS'),]
+M40<- MF[(MF$Category=='M40'),]
+M35<- MF[(MF$Category=='M35'),]
+M45<- MF[(MF$Category=='M45'),]
+FS<- MF[(MF$Category=='FS'),]
+F35<- MF[(MF$Category=='F35'),]
+M50<- MF[(MF$Category=='M50'),]
+```
+
+
+#Arun Analysis
+```{r}
+mean_spd_data<- rbind(
+  transform(mean_spd_10, At = "10K"),
+  transform(mean_spd_20, At = "20K"),
+  transform(mean_spd_25, At = "25K"),
+  transform(mean_spd_30, At = "30K"),
+  transform(mean_spd_40, At = "40K"),
+  transform(SPEED, At = "Overall")
+  )
+
+ggplot(mean_spd_data, aes(x = Category, y = Meanspd, fill = At)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(title = "Speed Comparison by Category", x = "Category", y = "Speed") +
+  theme_minimal()
+
+# plotting Gun Time vs Chip Time
+mmodel <- lm(Chip.Time ~ Gun.Time, data = MF)
+
+gg<- ggplot(MF,aes(Gun.Time,Chip.Time))+
+  geom_point(color="green")+
+  geom_smooth(aes(x = Gun.Time, y = predict(lm(Chip.Time ~ Gun.Time, data = MF)), color = "red")) +
+  labs(title="Gun Time vs Chip Time",x="Guntime",y="Chiptime")
+ggplotly(gg)
+
+# There is not much difference in Gun time and Chip time from this graph.
+
+
+#Analyzing how each category performed (Finished)
+gg<-ggplot(MF,aes(Category))+
+  geom_bar()+
+  labs(title= "Analysis of Category",x="Category",y="Number of people finished the race")+
+  theme_minimal()
+ggplotly(gg)
+# We analyzed the data based on the category, and we found that the Male40 category had the highest number of completions in the race with 2228 and M80 had the least number of completions with 3. This doesn't signify that all the M40 participants performed well. It could also be attributed to the more number of participants in the first place.
+
+
+#Analyzing the average speed of each category
+SPEED<- MF |> group_by(Category) |> summarize(Meanspd=mean(Avg_speed))
+gg<- ggplot(SPEED,aes(Category,Meanspd))+
+  geom_point()+
+  labs(title="Average speed of a category",x="Category",y="Average speed (m/s)")+
+  theme_minimal()
+ggplotly(gg)
+# After computing the average speed of the participants in each category who completed the race, we got to know that the participants in the M40 category had the highest mean of average speed among other category participants and F75 category had the lowest mean of average speed among the other category participants. We could conclude that the mean of average speed would signify if people in that category finished better (directly proportional).
+
+
+#Analyzing the average time taken by each category to finish the race
+Timetaken<- MF |> group_by(Category) |> summarize(TT=mean(Gun.Time))
+gg<- ggplot(Timetaken,aes(Category,TT))+
+  geom_point()+
+  labs(title="Time taken by each category",x="Category",y="Average time taken to complete (seconds)")+
+  theme_minimal()
+ggplotly(gg)
+# After computing the average time taken by the participants in each category who completed the race, we got to know that the participants in the M40 category took the mean lowest time to finish among other category participants and F75 category took the mean highest time to finish among the other category participants. We could conclude that the time taken by each category says volumes about their performance and their physical capabilities(if one needs to analyze it).
+
+
+#Separating those who completed the race into subsets according to Category (Age groups)
+MS<- MF[(MF$Category=='MS'),]
+M40<- MF[(MF$Category=='M40'),]
+M35<- MF[(MF$Category=='M35'),]
+M45<- MF[(MF$Category=='M45'),]
+FS<- MF[(MF$Category=='FS'),]
+F35<- MF[(MF$Category=='F35'),]
+M50<- MF[(MF$Category=='M50'),]
+
+#Might not be useful in the report
+#boxplot(MS$Avg_speed)
+#boxplot(M40$Avg_speed)
+#boxplot(M35$Avg_speed)
+#boxplot(M45$Avg_speed)
+#boxplot(FS$Avg_speed)
+#boxplot(F35$Avg_speed)
+#boxplot(M50$Avg_speed)
+#boxplot(MF$Avg_speed)
+
+
+#Analyzing how many people outperformed in their category (Only those who fall above the 95% Confidence interval)
+OP<-MF[(MF$Avg_speed>quantile(MF$Avg_speed,0.975)),]
+gg<- ggplot(OP,aes(Category))+
+  geom_bar()+
+  labs(title="Outperformers in categories",x="Category",y="Number of people outperformed")+
+  theme_minimal()
+ggplotly(gg)
+# From this graph, we can get the number of top 2.5% performers from each category. The higher the number, signifies so many participants finished the race. It does not signify that they were the participants who would be in the top ranks, but only to show how many of them finished.
+
+#Association of runners with Clubs
+MF<- MF|> mutate(Has_Club = ifelse(Club == "No club", "No", "Yes"))
+gg<- ggplot(MF,aes(Has_Club))+
+  geom_bar()+
+  labs(title="Association with a Club",x="Do they belong to a club?",y="Number of runners")+
+  theme_minimal()
+ggplotly(gg)
+# This graph is for differentiating people who belong to a club and those who don't among the ones who finished.
+
+
+
+best_cat <- MF |> group_by(Category) |> top_n(1, wt = desc(Gun.Time)) |> ungroup()
+
+
+```
+#Felicita Analysis
+
+```{r}
+glimpse(MF)
+
+#visualization of stage positions for a subset sample fo 100
+MF_subset <- head(MF, 100)
+
+ggparcoord(MF_subset, columns = c(11,13,15,17,19,21),
+           groupColumn = 4 , scale = "globalminmax",
+           showPoints=TRUE, 
+           alphaLines = 0.3, mapping = ggplot2::aes(linewidth = 1),
+           title = "Stage Postitions") +
+  ggplot2::scale_linewidth_identity() +
+  scale_color_viridis(discrete=TRUE) +
+  theme_ipsum()+
+  theme(
+    legend.position="Default",
+    plot.title = element_text(size=13)
+  ) +
+  xlab("")
+
+#seperating the dataset into two groups.
+#finishers and non finishers of the marathon
+
+M$FinishStatus <- ifelse(M$Category.Position == "DNF", "Did Not Finish", "Finished")
+
+# Separate data into two groups
+finished <- M[M$FinishStatus == "Finished", ]
+DNF <- M[M$FinishStatus == "Did Not Finish", ]
+countofDNF <- sum(M$FinishStatus=="Did Not Finish")
+countofDNF
+sum(M$FinishStatus=="Finished")
+
+ggplot(data = M) +
+  geom_col(mapping = aes(x = Category, y= Gender, fill=FinishStatus)) 
+
+#visualization to capture the highest category group who finished 
+#the marathon 
+
+ggplot(MF, aes(x = Gender, fill = Category)) +
+  geom_bar(stat = "count", position = "dodge") +
+  theme_minimal() +
+  labs(
+    x = 'Gender',
+    y = 'age category',
+    title = 'Age impact based on gender',
+    caption = 'Finished status of Female and Male Participants 
+    based on Age category'
+  )
+
+#Analysis of categorical  two proportion hypothesis based on the highest group
+#that participated in the race . Gender F40-F45 and M40-M45
+
+#statistical analysis
+ggplot(data = M) +
+  geom_bar(mapping = aes(x = FinishStatus, fill= Gender)) 
+
+#considering the Finished status of both gender .
+
+FinishedF <- subset(MF,Gender=="Female")
+count(FinishedF)
+
+FinishedM <- subset(MF,Gender =="Male")
+count(FinishedM)
+
+
+# Subset the unique data for the desired categories
+
+
+desired_genders <- c("Male", "Female")
+desired_categories <- c("F40", "F45", "M40", "M45")
+filtered_data <- MF[MF$Category %in% desired_categories & MF$Gender %in% desired_genders, ]
+count(filtered_data)
+
+
+Hypothesis_data <- filtered_data %>% select(Gender,Category) %>%
+  mutate(Category = recode(Category,
+                           "F40" = "U40", "M40" = "U40", "F45" = "O40", "M45" = "O40")) 
+count(Hypothesis_data)
+
+ggplot(Hypothesis_data, aes(x = "", fill = Category)) +
+  geom_bar(width = 1, stat = "count") +
+  coord_polar(theta = "y") +
+  labs(title = "Pie Chart of Category Distribution")
+
+#out of the 15175 who ran the marathon , 14,355 finished the marathon without
+#any discrepancies . male from 40-45 and Female from 40-45 finished most
+#count - 6306
+
+#they are divided as under 40 (U45) and Over40 (O45)
+
+tab <- table(Hypothesis_data)
+tab
+
+#we can consider this as the analysis of two categorical(binary) variables
+#Female or Male and U40 or O40
+
+ptab <- prop.table(tab,2)
+ptab
+
+par(mfrow = c(1, 2))
+
+# Bar plot for counts
+barplot(tab,
+        main = "Bar Plot of Counts", xlab = "Categories", ylab = "Count")
+
+# Bar plot for proportions
+barplot(ptab, 
+        main = "Bar Plot of Proportions", xlab = "Categories",
+        ylab = "Proportion")
+
+#The people who finished  are a sample of size n.
+
+x <- c(1059,2031)
+n <- c(1059+1034 ,2031+2182)
+
+prop.test(x,n)
+
+#will do the explaination seperately
+
+
+```
+
+#Francis Analysis
+```{r}
+reg_data <- MF |> 
+  select(Time_10Km, Time_20Km, Chip.Time, Overall.Position)
+
+reg_data <- reg_data[complete.cases(reg_data),]
+
+
+y <- reg_data$Chip.Time
+index <- createDataPartition(y, p = .8, list = F)
+
+
+train_data <- reg_data[index,]
+test_data <- reg_data[-index,]
+
+model <- lm(Chip.Time ~ ., data = train_data)
+
+
+
+pred <- predict(model, newdata = test_data)
+
+
+test_data$predictions <- pred
+
+p <- ggplot(data = test_data,
+       mapping = aes(x = Chip.Time, y = predictions)) +
+  geom_jitter() +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  geom_smooth(method = lm, se = F, color = "blue") +
+  labs(title = "Actual vs Predicted Chip Time",
+       x = "Actual Chip Time",
+       y = "Predicted Chip Time") +
+  theme(plot.title = element_text(hjust = .5))
+ggplotly(p)
+
+
+```
+
+
+#Saad Analysis
+```{r}
+# Scatter plot: Gun Time vs Overall Position
+ggplot(MF, aes(x = `Gun.Time`, y = `Overall.Position`)) +
+  geom_point() +
+  labs(title = "Gun Time vs Overall Position",
+       x = "Gun Time",
+       y = "Overall Position") +
+  theme_minimal()
+
+# Calculate correlations between numerical variables
+numerical_data <- subset(MF, select = c(`Gun.Time`, `Overall.Position`))
+
+# Subset the numerical columns for correlation analysis
+numerical_data <- subset(MF, select = c(`Gun.Time`, `Overall.Position`))
+
+
+
+# Check if conversion was successful
+str(numerical_data)
+
+# Calculate correlations between numerical variables
+correlation_matrix <- cor(numerical_data, use = "pairwise.complete.obs")
+print("Correlation Matrix:")
+print(correlation_matrix)
+
+
+
+
+correlation_matrix <- cor(numerical_data, use = "pairwise.complete.obs")
+print("Correlation Matrix:")
+print(correlation_matrix)
+
+
+# Filter data for male and female separately
+male_runners <- MF |>
+  filter(Gender == "Male")
+
+female_runners <- MF %>%
+  filter(Gender == "Female")
+
+# Analyze performance by club for males
+male_club_performance <- male_runners %>%
+  group_by(Club) %>%
+  summarize(Average_Position = mean(Gender.Position, na.rm = TRUE))
+
+# Analyze performance by club for females
+female_club_performance <- female_runners %>%
+  group_by(Club) %>%
+  summarize(Average_Position = mean(Gender.Position, na.rm = TRUE))
+
+# Compare club performance for males and females
+print("Male Club Performance:")
+print(male_club_performance)
+
+print("Female Club Performance:")
+print(female_club_performance)
+
+# Check if having a club relates to better positions in the marathon
+with_club <- MF %>%
+  filter(!is.na(Club))
+
+without_club <- MF %>%
+  filter(is.na(Club))
+
+# Calculate average positions for runners with and without a club
+avg_position_with_club <- mean(with_club$Gender_Position, na.rm = TRUE)
+avg_position_without_club <- mean(without_club$Gender_Position, na.rm = TRUE)
+
+print("Average Position for Runners with Club:")
+print(avg_position_with_club)
+
+print("Average Position for Runners without Club:")
+print(avg_position_without_club)
+
+
+# Filter data for male and female separately
+male_runners <- MF %>%
+  filter(Gender == "Male")%>%
+  top_n(20, wt = -Overall.Position)
+
+female_runners <- MF %>%
+  filter(Gender == "Female")%>%
+  top_n(20, wt = -Overall.Position)
+
+# Analyzing the effect of club on position for males
+male_club_analysis <- male_runners %>%
+  group_by(Club) %>%
+  summarize(Average_Position = mean(Overall.Position, na.rm = TRUE))
+
+# Analyzing the effect of club on position for females
+female_club_analysis <- female_runners %>%
+  group_by(Club) %>%
+  summarize(Average_Position = mean(Overall.Position, na.rm = TRUE))
+
+# Visualizing the analysis with graphs
+# Graph for male runners
+ggplot(male_club_analysis, aes(x = Club, y = Average_Position, fill = Club)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Position by Club for Male Runners",
+       x = "Club",
+       y = "Average Position") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Graph for female runners
+ggplot(female_club_analysis, aes(x = Club, y = Average_Position, fill = Club)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Position by Club for Female Runners",
+       x = "Club",
+       y = "Average Position") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Assuming 'marathon_data' contains the dataset with fields Gun.Time, Overall.Position, Chip.Time, Avg_speed, Gender, Club
+
+# Filter data for top 25 female athletes based on better overall positions
+top_female_athletes <- MF %>%
+  filter(Gender == "Female") %>%
+  top_n(20, wt = -Overall.Position)
+
+# Create a bubble graph showing top 20 Female athletes by overall position, differentiated by clubs with a different theme and adjusted color palette
+ggplot(top_female_athletes, aes(x = Overall.Position, y = Chip.Time, size = Avg_speed, color = factor(Club))) +
+  geom_point(alpha = 0.7) +
+  scale_size(range = c(3, 10)) +
+  labs(title = "Top 20 Female Athletes by Overall Position",
+       x = "Overall Position",
+       y = "Chip Time",
+       size = "Average Speed",
+       color = "Club") +
+  scale_color_brewer(palette = "Set3") +  # Change the color palette here (e.g., Set3 from RColorBrewer)
+  theme_minimal() +
+  theme(legend.position = "bottom")  # Adjust the legend position if needed
+
+
+
+
+# Filter data for top 25 Male athletes based on better overall positions
+top_male_athletes <- MF %>%
+  filter(Gender == "Male") %>%
+  top_n(20, wt = -Overall.Position)
+
+# Create a bubble graph showing top 25 Female athletes by overall position, differentiated by clubs with a different theme and adjusted color palette
+ggplot(top_male_athletes, aes(x = Overall.Position, y = Chip.Time, size = Avg_speed, color = factor(Club))) +
+  geom_point(alpha = 0.7) +
+  scale_size(range = c(3, 10)) +
+  labs(title = "Top 20 Male Athletes by Overall Position",
+       x = "Overall Position",
+       y = "Chip Time",
+       size = "Average Speed",
+       color = "Club") +
+  scale_color_brewer(palette = "Set3") +  # Change the color palette here (e.g., Set3 from RColorBrewer)
+  theme_minimal() +
+  theme(legend.position = "bottom")  # Adjust the legend position if needed
+
+
+
+```
