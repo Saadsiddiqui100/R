@@ -1,0 +1,244 @@
+---
+title: 'ST661: Exam December 2023 Part B'
+author: "Saad Siddiqui 23250068"
+date: ''
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+options(continue=" ")
+
+knitr::opts_chunk$set(comment=NA, fig.width=5, fig.height=4,prompt=TRUE,fig.align='center', fig.pos='h',prompt=F, echo=T, message = F)
+```
+
+
+- Download fin23.Rmd from Moodle and fill in your answers.
+
+- Place your name and student number in the space for `author:`.
+
+- Upload the html file produced by knitr to Moodle before 3.20pm. There  will be a penalty of 10 marks for not uploading the html file.
+
+
+- Do not include in your html file long data listings. There will be a 5 mark penalty for this.
+
+- If your code for any answer does not run, use `{r, eval=FALSE}` for your code chunk. If the answer to a question relates to the answer to a previous question that you did not complete, you may still give code in an `eval=FALSE` code chunk.
+
+
+
+
+
+
+```{r, warning=F, message=F}
+
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+```
+
+### Question 1    (48 marks, 8 marks per part)
+    
+The file provided on Moodle `children.Rdata`
+gives information on the age, height, weight and BMI of children measured multiple times.
+Download the data and place in the same folder as your Rmarkdown file.
+Access  the data with
+
+```{r, echo=T}
+load("children.Rdata") # gives dataset called kids
+```
+
+Write code for each of the following. You can use base R, tidyverse or a mix.
+
+1a. Change the class of the date variable to be class `POSIXct`. Show the result of `glimpse(d)` to verify your code.
+```{r}
+#1a
+
+
+str(kids) 
+
+# The date wasnt in the correct format as POSIxct so we had to mutate it and add a day, So I added the first of every month
+
+kids <- mutate(kids, date = paste(date, "-01", sep = ""))  # Adding day component as 01 
+
+str(kids) 
+
+
+# POSIXct converted
+kids$date <- as.POSIXct(kids$date, format = "%Y-%m-%d")
+
+
+
+
+
+glimpse(kids)
+
+```
+
+
+
+1b. Find the IDs of the children whose age.bin is 12 at the start of the study (the earliest date)
+
+```{r}
+#1b
+
+
+
+earliest_date <- min(kids$date)
+
+
+ids12 <- kids$ID[kids$date == earliest_date & kids$age.bin == 12]
+
+ids12
+
+```
+
+1c. For the children whose age.bin is 12 at the start of the study, plot `height` versus `date` as a line plot. Colour the lines by gender.
+
+```{r}
+#1c
+
+# for children whose age  is 12 at the start of the study
+kids12_start <- subset(kids, age.bin == 12 & date == min(date))
+
+
+Year <- year(kids12_start$date)
+
+ggplot(kids12_start, aes(x =  Year , y = height, color = gender)) +
+  geom_line() +
+  labs(x = "Date", y = "Height") +
+  ggtitle("Height vs Date for Children at Age 12 at Start of Study") +
+  theme_minimal()
+
+
+
+```
+
+1d.  Make a subset of the data consisting of kids whose `age.bin` is 12. For children who appear multiple times in this subset, remove all but the first occurrence. Call this subset `kids12`. Show the result with `glimpse(kids12)`.
+
+```{r}
+#1d
+
+
+# 12 year filter on kids
+kids12 <- kids %>%
+  filter(age.bin == 12) %>%
+  distinct(ID, .keep_all = TRUE)
+
+# Show the result with glimpse
+glimpse(kids12)
+
+
+```
+
+
+1e. Using `kids12` , find the proportion of boys and
+girls in each of the `BMIcat` groups.
+Omit those whose `BMIcat` is `NA` from the calculation.
+
+```{r}
+#1e
+
+# the formula of proportion is count over sum of total count
+
+BMIcat_filtered <- kids12 %>%
+  filter(!is.na(BMIcat)) 
+
+
+proportion_by_BMIcat <- BMIcat_filtered %>%
+  group_by(BMIcat, gender) %>%
+  summarise(count = n()) %>%
+  group_by(BMIcat) %>%
+  mutate(proportion = count / sum(count))
+
+print(proportion_by_BMIcat)
+
+
+```
+
+
+
+1f. Make a barplot showing the proportion of boys and girls in `kids12`
+in each of the BMI categories. Omit those whose `BMIcat` is `NA`.
+Make sure that the ` BMIcat` labels are in order of increasing `BMIcat`.
+
+```{r}
+#1f
+
+library(ggplot2)
+
+
+filtered_data <- kids12 %>%
+  filter(!is.na(BMIcat)) %>%
+  mutate(BMIcat = factor(BMIcat, levels = unique(BMIcat)))
+
+
+proportion_by_BMIcat <- filtered_data %>%
+  group_by(BMIcat, gender) %>%
+  summarise(count = n()) %>%
+  group_by(BMIcat) %>%
+  mutate(proportion = count / sum(count))
+
+
+
+
+ggplot(proportion_by_BMIcat, aes(x = BMIcat, y = proportion, fill = gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "BMI Category", y = "Proportion", title = "Proportion of Boys and Girls in BMI Categories") +
+  scale_fill_manual(values = c("black", "red"), name = "Gender") +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+
+
+
+###  Question 2. (18 marks)
+
+Write a function called `runzero` that given a numeric vector  return the length of the longest
+  consecutive subsequence of zeros.
+ Run the following to test your answers. 
+
+runzero(c(4,5,6,1))  
+
+runzero(c(4,0,0,0,6,0,0,0,0))  
+
+runzero(c(0,0,3,3,3,3))
+
+
+  
+```{r}
+#calculate longest zero sequence = clzs
+#max sequence length = msl
+clzs <- function(vector) {
+  msl <- 0
+  current_sequence_length <- 0
+  
+  for (element in vector) {
+    if (element == 0) {
+      current_sequence_length <- current_sequence_length + 1
+      msl <- max(msl, current_sequence_length)
+    } else {
+      current_sequence_length <- 0
+    }
+  }
+  
+  return(msl)
+}
+
+# Test cases
+result1 <- clzs(c(4, 5, 6, 1))        
+result2 <- clzs(c(4, 0, 0, 0, 6, 0, 0, 0, 0))  
+result3 <- clzs(c(0, 0, 3, 3, 3, 3))          
+
+# Print the results
+print(result1)
+print(result2)
+print(result3)
+```
+
+install.packages('tinytex')
+tinytex::install_tinytex()
+
+  
